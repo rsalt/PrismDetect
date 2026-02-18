@@ -1,6 +1,6 @@
 # 🚀 PrismDetect
 
-Lightweight AI-based product detection system that identifies products through multi-stage validation: visual similarity + text verification + shape analysis.
+Lightweight AI-based product detection system that identifies products through multi-stage validation: visual similarity + text verification + shape analysis. (in just 100MB?)
 
 ## ✨ Features
 
