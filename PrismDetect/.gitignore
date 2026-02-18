@@ -1,0 +1,63 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+*.coverage.*
+.mypy_cache/
+.ruff_cache/
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv/
+virtualenv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Models (downloaded, not source)
+/models/*.onnx
+/models/*.mlpackage
+/models/*.tflite
+/models/*.pt
+!/models/.gitkeep
+
+# Data
+/data/references/*
+!/data/references/.gitkeep
+/data/index/*
+!/data/index/.gitkeep
+/data/logs/*
+!/data/logs/.gitkeep
+
+# Config
+.env
+config/.env
+*.log
+
+# Docker
+docker/ssl/
+
+# Test images
+tests/fixtures/test_images/*.jpg
+tests/fixtures/test_images/*.png
+!tests/fixtures/test_images/.gitkeep
+
+# OS
+Thumbs.db
+ehthumbs.db
+Desktop.ini

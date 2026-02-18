@@ -1,0 +1,60 @@
+{
+  "version": "1.0",
+  "last_updated": "2024-01-01T00:00:00Z",
+  "products": [
+    {
+      "id": "poc_milk_1l",
+      "name": "Pride of Cows Milk - 1 Liter",
+      "brand": "Pride of Cows",
+      "category": "dairy",
+      "active": true,
+      "created_at": "2024-01-01T00:00:00Z",
+      "keywords": [
+        "pride",
+        "cows",
+        "milk",
+        "pride of cows",
+        "farm fresh"
+      ],
+      "validation": {
+        "min_confidence": 0.75,
+        "require_text": true,
+        "shape_tolerance": 0.15,
+        "expected_aspect_ratio": 0.85
+      },
+      "reference_images": [],
+      "metadata": {
+        "volume": "1L",
+        "material": "plastic",
+        "color": "white"
+      }
+    },
+    {
+      "id": "test_product",
+      "name": "Test Product",
+      "reference_images": [
+        {
+          "id": "ref_1771380725",
+          "url": "data/references/test_product/ref_1771380725.jpg",
+          "angle": "unknown",
+          "added_at": 1771380725.082454
+        }
+      ]
+    }
+  ],
+  "system": {
+    "auto_learning": {
+      "enabled": true,
+      "threshold": 0.95,
+      "max_references_per_product": 50
+    },
+    "patch_scanner": {
+      "patch_size": 224,
+      "stride": 112
+    },
+    "index": {
+      "type": "FlatIP",
+      "dimension": 768
+    }
+  }
+}

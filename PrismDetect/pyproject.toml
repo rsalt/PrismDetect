@@ -1,0 +1,47 @@
+[project]
+name = "prismdetect"
+version = "1.0.0"
+description = "Lightweight AI-based product detection system"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [
+    {name = "Your Name", email = "your.email@example.com"}
+]
+keywords = ["computer-vision", "product-detection", "ai", "clip", "fastapi"]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/prismdetect"
+Documentation = "https://prismdetect.readthedocs.io"
+Repository = "https://github.com/yourusername/prismdetect.git"
+
+[tool.black]
+line-length = 100
+target-version = ['py39']
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.mypy]
+python_version = "3.9"
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+python_files = "test_*.py"
+addopts = "-v --tb=short"
+
+[tool.coverage.run]
+source = ["core", "api"]
+omit = ["tests/*", "*/__init__.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if __name__ == .__main__.",
+    "raise AssertionError",
+    "raise NotImplementedError",
+]

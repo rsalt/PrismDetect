@@ -1,0 +1,8 @@
+# Build dependencies (for model conversion)
+torch==2.4.1
+torchvision==0.19.1
+transformers==4.35.0
+onnx==1.16.1
+onnxoptimizer==0.3.13
+onnxruntime==1.19.0
+numpy<2.0

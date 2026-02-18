@@ -1,0 +1,22 @@
+-r requirements.txt
+
+# Testing
+pytest==7.4.3
+pytest-cov==4.1.0
+pytest-asyncio==0.21.1
+httpx==0.25.1
+
+# Code quality
+black==23.11.0
+isort==5.12.0
+mypy==1.7.0
+flake8==6.1.0
+pre-commit==3.5.0
+
+# Profiling
+memory-profiler==0.61.0
+line-profiler==4.1.1
+
+# Documentation
+mkdocs==1.5.3
+mkdocs-material==9.4.14

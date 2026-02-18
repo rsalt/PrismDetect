@@ -1,0 +1,37 @@
+# Core API
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-multipart==0.0.9
+
+# Image processing
+pillow==10.4.0
+numpy==1.26.4
+opencv-python-headless==4.9.0.80
+
+# Single inference engine (works everywhere!)
+onnxruntime==1.19.0
+
+# Vector search
+faiss-cpu==1.8.0
+
+# OCR
+easyocr==1.7.1
+
+# NLP
+transformers==4.35.0
+tokenizers==0.14.1
+
+# Validation
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# Utilities
+loguru==0.7.2
+python-dotenv==1.0.0
+psutil==5.9.8
+
+# Monitoring
+prometheus-client==0.20.0
+
+# HTTP client (for health checks)
+requests==2.31.0

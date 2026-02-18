@@ -1,0 +1,7 @@
+{
+  "name": "PrismDetect Ops Console v2.0",
+  "description": "A high-performance AI operations console for computer vision lifecycle management, featuring real-time detection monitoring, product registry, and forensics.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

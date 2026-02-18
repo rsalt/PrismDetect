@@ -1,0 +1,62 @@
+# docker/docker-compose.yml
+
+services:
+  prismdetect:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: prismdetect
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../config:/app/config
+      - ../data:/app/data
+      - ../models:/app/models
+      - ../logs:/app/data/logs
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - AUTO_LEARN_ENABLED=true
+      - MIN_CONFIDENCE=0.75
+      - OMP_NUM_THREADS=1
+      - MKL_NUM_THREADS=1
+      - PYTHONFAULTHANDLER=1
+    command: [ "uvicorn", "api.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1" ]
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - prism-network
+
+  frontend:
+    build: ../../frontend
+    container_name: prism-frontend
+    ports:
+      - "8501:80"
+    volumes:
+      - ../../frontend:/app
+    environment:
+      - API_URL=http://localhost:8000
+    depends_on:
+      - prismdetect
+    networks:
+      - prism-network
+
+networks:
+  prism-network:
+    driver: bridge
