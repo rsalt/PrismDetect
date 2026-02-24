@@ -18,6 +18,7 @@ export const VisionLab: React.FC = () => {
   const [showJson, setShowJson] = useState(false);
   const [activeDetection, setActiveDetection] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
 
   // Pan & Zoom state
   const [scale, setScale] = useState(1);
@@ -78,6 +79,7 @@ export const VisionLab: React.FC = () => {
       setImage(b64);
       setDetections([]); // Clear previous
       setHasScanned(false);
+      setNaturalSize({ width: 0, height: 0 }); // reset natural size
     };
     reader.readAsDataURL(file);
     processImage(file);
@@ -178,10 +180,15 @@ export const VisionLab: React.FC = () => {
         >
           {image ? (
             <div
-              className="relative transition-transform duration-75"
+              className="relative transition-transform duration-75 inline-block"
               style={{ transform: `scale(${scale}) translate(${offset.x / scale}px, ${offset.y / scale}px)` }}
             >
-              <img src={image} className={cn("max-h-[70vh] w-auto select-none rounded-lg", loading && "opacity-40 grayscale")} alt="Target" />
+              <img
+                src={image}
+                className={cn("max-h-[70vh] w-auto select-none rounded-lg block", loading && "opacity-40 grayscale")}
+                alt="Target"
+                onLoad={(e) => setNaturalSize({ width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight })}
+              />
 
               {!loading && (
                 <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox={`0 0 ${selectedFile ? 1000 : 1000} ${selectedFile ? 1000 : 1000}`} style={{ width: '100%', height: '100%' }}>
@@ -199,26 +206,23 @@ export const VisionLab: React.FC = () => {
 
               {/* Using absolute positioned divs for boxes is safer than SVG viewBox misalignment */}
               {filteredDetections.map((det, i) => {
-                // Box is {x, y, width, height} in pixels relative to original image
-                // We need to match it to the displayed image size.
-                // This is tricky without knowing naturalWidth/Height.
-                // For this demo, let's assume the user accepts that boxes might be slightly off until we get natural dimensions.
-                // OR we can rely on standard <img> behavior involved with a wrapper.
+                const scaledLeft = naturalSize.width ? `${(det.bbox.x / naturalSize.width) * 100}%` : `${det.bbox.x}px`;
+                const scaledTop = naturalSize.height ? `${(det.bbox.y / naturalSize.height) * 100}%` : `${det.bbox.y}px`;
+                const scaledWidth = naturalSize.width ? `${(det.bbox.width / naturalSize.width) * 100}%` : `${det.bbox.width}px`;
+                const scaledHeight = naturalSize.height ? `${(det.bbox.height / naturalSize.height) * 100}%` : `${det.bbox.height}px`;
+
                 return (
                   <div
                     key={i}
                     className={cn(
-                      "absolute border-2",
-                      det.confidence > 0.95 ? "border-emerald-500" : "border-blue-500"
+                      "absolute border-2 transition-all duration-300",
+                      det.confidence > 0.95 ? "border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.3)]" : "border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.3)]"
                     )}
                     style={{
-                      left: `${det.bbox.x}px`,
-                      top: `${det.bbox.y}px`,
-                      width: `${det.bbox.width}px`,
-                      height: `${det.bbox.height}px`,
-                      // This works if `img` is displayed at native resolution.
-                      // If scaled via CSS (max-h-[70vh]), we need a scaler.
-                      // Ignored for MVP speed.
+                      left: scaledLeft,
+                      top: scaledTop,
+                      width: scaledWidth,
+                      height: scaledHeight,
                     }}
                   >
                     <span className={cn(
@@ -231,6 +235,18 @@ export const VisionLab: React.FC = () => {
                 );
               })}
 
+              {/* No Results Found Overlay on Image Canvas */}
+              {hasScanned && !loading && filteredDetections.length === 0 && (
+                <div className="absolute top-1/2 left-0 right-0 -translate-y-1/2 bg-black/80 backdrop-blur-md py-4 border-y border-zinc-800 flex items-center justify-center z-20">
+                  <div className="flex items-center gap-3">
+                    <div className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+                    <span className="text-white font-black tracking-widest uppercase text-sm italic">
+                      NO RESULT FOUND
+                    </span>
+                    <div className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+                  </div>
+                </div>
+              )}
 
               {loading && (
                 <div className="absolute inset-0 flex items-center justify-center">

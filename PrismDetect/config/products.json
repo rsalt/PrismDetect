@@ -22,22 +22,90 @@
         "shape_tolerance": 0.15,
         "expected_aspect_ratio": 0.85
       },
-      "reference_images": [],
+      "reference_images": [
+        {
+          "id": "ref_1771835200",
+          "url": "data/references/poc_milk_1l/ref_1771835200.jpg",
+          "angle": "unknown",
+          "added_at": 1771835200.73798
+        }
+      ],
       "metadata": {
         "volume": "1L",
         "material": "plastic",
         "color": "white"
-      }
+      },
+      "locked": false
     },
     {
-      "id": "test_product",
-      "name": "Test Product",
+      "id": "test-product",
+      "name": "Paneer",
       "reference_images": [
         {
-          "id": "ref_1771380725",
-          "url": "data/references/test_product/ref_1771380725.jpg",
+          "id": "ref_1771835251",
+          "url": "data/references/test-product/ref_1771835251.jpg",
           "angle": "unknown",
-          "added_at": 1771380725.082454
+          "added_at": 1771835251.4065647
+        }
+      ]
+    },
+    {
+      "id": "ghee-1liter",
+      "name": "Ghee 1 Liter",
+      "reference_images": [
+        {
+          "id": "ref_1771835323",
+          "url": "data/references/ghee-1liter/ref_1771835323.jpg",
+          "angle": "unknown",
+          "added_at": 1771835323.8372977
+        }
+      ]
+    },
+    {
+      "id": "fat-free-paneer",
+      "name": "Law Fat Paneer",
+      "reference_images": [
+        {
+          "id": "ref_1771835394",
+          "url": "data/references/fat-free-paneer/ref_1771835394.jpg",
+          "angle": "unknown",
+          "added_at": 1771835394.7306345
+        }
+      ]
+    },
+    {
+      "id": "poc-curd-blueberry",
+      "name": "POC Yogurt Blueberry",
+      "reference_images": [
+        {
+          "id": "ref_1771835559",
+          "url": "data/references/poc-curd-blueberry/ref_1771835559.jpg",
+          "angle": "unknown",
+          "added_at": 1771835559.9138203
+        }
+      ]
+    },
+    {
+      "id": "poc-fat-free-milk-1liter",
+      "name": "Pride of cows fat free milk - 1 Liter",
+      "reference_images": [
+        {
+          "id": "ref_1771835684",
+          "url": "data/references/poc-fat-free-milk-1liter/ref_1771835684.jpg",
+          "angle": "unknown",
+          "added_at": 1771835684.2636771
+        }
+      ]
+    },
+    {
+      "id": "poc-curd",
+      "name": "Pride of cows - curd",
+      "reference_images": [
+        {
+          "id": "ref_1771838576",
+          "url": "data/references/poc-curd/ref_1771838576.jpg",
+          "angle": "unknown",
+          "added_at": 1771838576.0438142
         }
       ]
     }

@@ -32,6 +32,7 @@ export interface Product {
   reference_count: number;
   keywords: string[];
   created_at?: string;
+  locked?: boolean;
   reference_images?: {
     id: string;
     url: string;

@@ -3,25 +3,21 @@ import {
   Plus, Search, Filter, Grid2X2, List,
   PackageCheck, X, Image as ImageIcon,
   History, ShieldCheck, MoreVertical, Trash2,
-  Crop, Check
+  Crop, Check, Lock, Unlock, AlertTriangle
 } from 'lucide-react';
 import ReactCrop, { type Crop as CropType, PixelCrop, centerCrop, makeAspectCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 
-function centerAspectCrop(mediaWidth: number, mediaHeight: number) {
-  return centerCrop(
-    makeAspectCrop(
-      {
-        unit: '%',
-        width: 90,
-      },
-      undefined, // aspect
-      mediaWidth,
-      mediaHeight,
-    ),
-    mediaWidth,
-    mediaHeight,
-  )
+function getCenteredCrop(mediaWidth: number, mediaHeight: number): PixelCrop {
+  const cropWidth = mediaWidth * 0.9;
+  const cropHeight = mediaHeight * 0.9;
+  return {
+    unit: 'px',
+    width: cropWidth,
+    height: cropHeight,
+    x: (mediaWidth - cropWidth) / 2,
+    y: (mediaHeight - cropHeight) / 2,
+  };
 }
 
 import { Product } from '../types';
@@ -41,6 +37,10 @@ export const ProductStudio: React.FC = () => {
   const [newProdId, setNewProdId] = useState('');
   const [newProdName, setNewProdName] = useState('');
 
+  // Edit Product State
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editNameValue, setEditNameValue] = useState('');
+
   // Crop Modal State
   const [showCropModal, setShowCropModal] = useState(false);
   const [upImg, setUpImg] = useState<string | ArrayBuffer | null>(null);
@@ -49,6 +49,10 @@ export const ProductStudio: React.FC = () => {
   const imgRef = useRef<HTMLImageElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+
+  // Delete Product Modal State
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [referenceToDelete, setReferenceToDelete] = useState<string | null>(null);
 
   const processFile = (file: File) => {
     setSelectedFile(file);
@@ -84,9 +88,9 @@ export const ProductStudio: React.FC = () => {
 
   const onImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const { width, height } = e.currentTarget;
-    const newCrop = centerAspectCrop(width, height);
+    const newCrop = getCenteredCrop(width, height);
     setCrop(newCrop);
-    setCompletedCrop(convertToPixelCrop(newCrop, width, height));
+    setCompletedCrop(newCrop);
   };
 
   const convertToPixelCrop = (crop: CropType, imageWidth: number, imageHeight: number): PixelCrop => {
@@ -119,6 +123,47 @@ export const ProductStudio: React.FC = () => {
     setNewProdId('');
     setNewProdName('');
     refreshProducts();
+  };
+
+  const handleUpdateProduct = async () => {
+    if (!selectedProduct || !editNameValue) return;
+    try {
+      await prismApi.updateProduct(selectedProduct.id, { name: editNameValue });
+      const updated = await prismApi.getProduct(selectedProduct.id);
+      setSelectedProduct(updated);
+      setIsEditingName(false);
+      refreshProducts();
+    } catch (e) {
+      console.error(e);
+      alert("Failed to update product name");
+    }
+  };
+
+  const handleToggleLock = async () => {
+    if (!selectedProduct) return;
+    try {
+      const newLockedStatus = !selectedProduct.locked;
+      await prismApi.updateProduct(selectedProduct.id, { locked: newLockedStatus });
+      const updated = await prismApi.getProduct(selectedProduct.id);
+      setSelectedProduct(updated);
+      refreshProducts();
+    } catch (e) {
+      console.error(e);
+      alert("Failed to toggle lock status");
+    }
+  };
+
+  const handleDeleteProduct = async () => {
+    if (!selectedProduct || selectedProduct.locked) return;
+    try {
+      await prismApi.deleteProduct(selectedProduct.id);
+      setSelectedProduct(null);
+      setShowDeleteModal(false);
+      refreshProducts();
+    } catch (e) {
+      console.error(e);
+      alert("Failed to delete product");
+    }
   };
 
   const getCroppedImg = async (image: HTMLImageElement, crop: PixelCrop, fileName: string): Promise<Blob> => {
@@ -183,6 +228,7 @@ export const ProductStudio: React.FC = () => {
 
   const handleSelectProduct = async (product: Product) => {
     setSelectedProduct(product); // Optimistic
+    setIsEditingName(false);
     try {
       const fullData = await prismApi.getProduct(product.id);
       setSelectedProduct(fullData);
@@ -191,13 +237,14 @@ export const ProductStudio: React.FC = () => {
     }
   };
 
-  const handleDeleteReference = async (refId: string) => {
-    if (!selectedProduct || !confirm('Are you sure you want to delete this reference?')) return;
+  const handleDeleteReference = async () => {
+    if (!selectedProduct || !referenceToDelete || selectedProduct.locked) return;
     try {
-      await prismApi.deleteReference(selectedProduct.id, refId);
+      await prismApi.deleteReference(selectedProduct.id, referenceToDelete);
       // Refresh details
       const updated = await prismApi.getProduct(selectedProduct.id);
       setSelectedProduct(updated);
+      setReferenceToDelete(null);
       refreshProducts(); // Update counts
     } catch (e) {
       console.error("Failed to delete reference", e);
@@ -343,22 +390,23 @@ export const ProductStudio: React.FC = () => {
               </button>
             </div>
 
-            <div className="flex-1 overflow-auto p-8 flex items-center justify-center bg-black/40">
-              <div className="relative shadow-2xl border border-zinc-800/50">
-                <ReactCrop
-                  crop={crop}
-                  onChange={(c) => setCrop(c)}
-                  onComplete={(c) => setCompletedCrop(c)}
-                  aspect={undefined}
-                >
-                  <img
-                    ref={imgRef}
-                    src={upImg as string}
-                    alt="Upload"
-                    className="max-h-[65vh] object-contain block"
-                    onLoad={onImageLoad}
-                  />
-                </ReactCrop>
+            <div className="flex-1 overflow-auto bg-black/40">
+              <div className="min-h-full flex p-4 md:p-8">
+                <div className="m-auto relative shadow-2xl border border-zinc-800/50 flex justify-center items-center bg-black">
+                  <ReactCrop
+                    crop={crop}
+                    onChange={(c) => setCrop(c)}
+                    onComplete={(c) => setCompletedCrop(c)}
+                  >
+                    <img
+                      ref={imgRef}
+                      src={upImg as string}
+                      alt="Upload"
+                      className="max-h-none max-w-full w-auto h-auto block"
+                      onLoad={onImageLoad}
+                    />
+                  </ReactCrop>
+                </div>
               </div>
             </div>
 
@@ -389,14 +437,50 @@ export const ProductStudio: React.FC = () => {
                 <div className="w-10 h-10 bg-blue-600/10 border border-blue-500/20 rounded-xl flex items-center justify-center text-blue-500">
                   <ShieldCheck size={24} />
                 </div>
-                <div>
-                  <h2 className="text-xl font-bold tracking-tight">{selectedProduct.name}</h2>
+                <div className="flex-grow">
+                  {isEditingName ? (
+                    <div className="flex items-center gap-2 mb-1">
+                      <input
+                        autoFocus
+                        type="text"
+                        value={editNameValue}
+                        onChange={(e) => setEditNameValue(e.target.value)}
+                        className="bg-black border border-zinc-800 px-2 py-1 rounded text-lg font-bold w-full focus:outline-none focus:border-blue-500"
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleUpdateProduct(); }}
+                      />
+                      <button onClick={handleUpdateProduct} className="text-emerald-500 hover:text-emerald-400 font-bold text-xs px-2 py-1.5 bg-emerald-500/10 rounded border border-emerald-500/20">SAVE</button>
+                      <button onClick={() => setIsEditingName(false)} className="text-zinc-500 hover:text-zinc-300 font-bold text-xs px-2 py-1.5">CANCEL</button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3 mb-1">
+                      <h2 className="text-xl font-bold tracking-tight">{selectedProduct.name}</h2>
+                      <button
+                        onClick={() => { setEditNameValue(selectedProduct.name); setIsEditingName(true); }}
+                        className="text-blue-500 hover:bg-blue-500/10 text-[10px] font-bold uppercase tracking-widest transition-all px-2 py-1 border border-blue-500/30 rounded"
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  )}
                   <p className="text-[10px] font-bold mono text-zinc-500 uppercase tracking-widest">Registry ID: {selectedProduct.id}</p>
                 </div>
               </div>
-              <button onClick={() => setSelectedProduct(null)} className="p-2 text-zinc-500 hover:text-zinc-100 bg-zinc-900 border border-zinc-800 rounded-lg">
-                <X size={20} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleToggleLock}
+                  className={cn(
+                    "p-2 border rounded-lg flex items-center gap-2 text-xs font-bold transition-colors",
+                    selectedProduct.locked
+                      ? "bg-amber-500/10 text-amber-500 border-amber-500/30 hover:bg-amber-500/20"
+                      : "bg-zinc-900 text-zinc-500 border-zinc-800 hover:text-zinc-300"
+                  )}
+                >
+                  {selectedProduct.locked ? <Lock size={16} /> : <Unlock size={16} />}
+                </button>
+                <button onClick={() => setSelectedProduct(null)} className="p-2 text-zinc-500 hover:text-zinc-100 bg-zinc-900 border border-zinc-800 rounded-lg">
+                  <X size={20} />
+                </button>
+              </div>
             </div>
 
             <div className="space-y-6">
@@ -431,9 +515,17 @@ export const ProductStudio: React.FC = () => {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleDeleteReference(ref.id);
+                            if (!selectedProduct.locked) {
+                              setReferenceToDelete(ref.id);
+                            }
                           }}
-                          className="mt-1 p-1 bg-red-600/80 hover:bg-red-500 text-white rounded-md self-end"
+                          disabled={selectedProduct.locked}
+                          className={cn(
+                            "mt-1 p-1 rounded-md self-end transition-colors",
+                            selectedProduct.locked
+                              ? "bg-zinc-800 text-zinc-600 cursor-not-allowed"
+                              : "bg-red-600/80 hover:bg-red-500 text-white"
+                          )}
                         >
                           <Trash2 size={12} />
                         </button>
@@ -457,6 +549,93 @@ export const ProductStudio: React.FC = () => {
                   </div>
                 </div>
               </div>
+
+              <div className="pt-8 border-t border-zinc-900/50 flex justify-end">
+                <button
+                  onClick={() => selectedProduct.locked ? null : setShowDeleteModal(true)}
+                  disabled={selectedProduct.locked}
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs transition-colors border",
+                    selectedProduct.locked
+                      ? "bg-zinc-900 text-zinc-600 border-zinc-800 cursor-not-allowed"
+                      : "text-rose-500 hover:text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border-rose-500/20"
+                  )}
+                >
+                  <Trash2 size={14} />
+                  DELETE ENTIRE PRODUCT
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && selectedProduct && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 p-4">
+          <div className="bg-zinc-950 border border-red-500/30 p-8 rounded-2xl w-full max-w-md space-y-6 shadow-[0_0_50px_rgba(239,68,68,0.15)] relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-600 to-rose-400"></div>
+            <div className="flex items-center gap-4 text-red-500">
+              <div className="p-3 bg-red-500/10 rounded-full">
+                <AlertTriangle size={32} />
+              </div>
+              <h2 className="text-xl font-black">WARNING</h2>
+            </div>
+
+            <div className="space-y-2 text-zinc-300">
+              <p>Permanently delete <strong>{selectedProduct.name}</strong> ({selectedProduct.id})?</p>
+              <p className="text-sm text-zinc-500">This will irrecoverably erase all associated vector data, reference images, and registry index entries. This process will break any depending entry processes for this product.</p>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4 border-t border-zinc-800/50">
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                className="px-5 py-2.5 font-bold text-sm text-zinc-400 hover:text-white rounded-lg transition-colors border border-transparent hover:border-zinc-800 bg-zinc-900"
+              >
+                CANCEL
+              </button>
+              <button
+                onClick={handleDeleteProduct}
+                className="px-6 py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-lg font-bold text-sm shadow-lg shadow-red-900/50 transition-all flex items-center gap-2"
+              >
+                <Trash2 size={16} />
+                CONFIRM DELETION
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Reference Confirmation Modal */}
+      {referenceToDelete && selectedProduct && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 p-4">
+          <div className="bg-zinc-950 border border-red-500/30 p-8 rounded-2xl w-full max-w-md space-y-6 shadow-[0_0_30px_rgba(239,68,68,0.1)] relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-600 to-rose-400"></div>
+            <div className="flex items-center gap-4 text-red-500">
+              <div className="p-3 bg-red-500/10 rounded-full">
+                <AlertTriangle size={32} />
+              </div>
+              <h2 className="text-xl font-black">DELETE REFERENCE</h2>
+            </div>
+
+            <div className="space-y-2 text-zinc-300">
+              <p>Permanently delete reference <strong>{referenceToDelete}</strong>?</p>
+              <p className="text-sm text-zinc-500">This action will remove the image from the index and cannot be undone.</p>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4 border-t border-zinc-800/50">
+              <button
+                onClick={() => setReferenceToDelete(null)}
+                className="px-5 py-2.5 font-bold text-sm text-zinc-400 hover:text-white rounded-lg transition-colors border border-transparent hover:border-zinc-800 bg-zinc-900"
+              >
+                CANCEL
+              </button>
+              <button
+                onClick={handleDeleteReference}
+                className="px-6 py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-lg font-bold text-sm shadow-lg shadow-red-900/50 transition-all flex items-center gap-2"
+              >
+                <Trash2 size={16} />
+                CONFIRM DELETION
+              </button>
             </div>
           </div>
         </div>
