@@ -47,9 +47,13 @@ export const prismApi = {
     },
 
     deleteProduct: async (productId: string) => {
-        // Not implemented in backend yet? specific route seems missing in snippet, assume existing or skip
-        // Returning mock for safety if not exists
-        return true;
+        const response = await api.delete(`/products/${productId}`);
+        return response.data;
+    },
+
+    updateProduct: async (productId: string, data: { name?: string, locked?: boolean }) => {
+        const response = await api.put(`/products/${productId}`, data);
+        return response.data;
     },
 
     uploadReference: async (productId: string, file: File) => {

@@ -23,6 +23,7 @@ async def health_check(detector: ProductDetector = Depends(get_detector)):
         "processor": platform.processor(),
         "python_version": platform.python_version(),
         "cpu_count": psutil.cpu_count(),
+        "cpu_percent": psutil.cpu_percent(interval=0.1),
         "memory_available": round(psutil.virtual_memory().available / (1024**3), 2),
         "memory_percent": psutil.virtual_memory().percent,
         "disk_free": round(psutil.disk_usage('/').free / (1024**3), 2)

@@ -9,6 +9,7 @@ import cv2
 import numpy as np
 from pathlib import Path
 import time
+import shutil
 from loguru import logger
 
 from api.dependencies import get_detector
@@ -105,6 +106,110 @@ async def add_product(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.put("/{product_id}")
+async def update_product(
+    product_id: str,
+    product_data: dict,
+    detector: ProductDetector = Depends(get_detector)
+):
+    """Update an existing product (e.g., name rename, toggle lock)"""
+    try:
+        product = None
+        for p in detector.config['products']:
+            if p['id'] == product_id:
+                product = p
+                break
+                
+        if not product:
+            raise HTTPException(status_code=404, detail="Product not found")
+            
+        if "name" in product_data:
+            product['name'] = product_data["name"]
+            
+        if "locked" in product_data:
+            product['locked'] = product_data["locked"]
+        
+        # Save config
+        with open(detector.config_path, 'w') as f:
+            json.dump(detector.config, f, indent=2)
+            
+        # Update metadata in index
+        updated_count = 0
+        if "name" in product_data:
+            for uid, meta in detector.index.metadata.items():
+                if meta['product_id'] == product_id:
+                    meta['metadata']['name'] = product['name']
+                    updated_count += 1
+                    
+            if updated_count > 0:
+                detector.index.save()
+            
+        return {"success": True, "message": f"Product updated. Adjusted {updated_count} index references."}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating product: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/{product_id}")
+async def delete_product(
+    product_id: str,
+    detector: ProductDetector = Depends(get_detector)
+):
+    """Delete an entire product and all its references"""
+    try:
+        # Find product
+        product_idx = -1
+        product = None
+        for i, p in enumerate(detector.config.get('products', [])):
+            if p['id'] == product_id:
+                product_idx = i
+                product = p
+                break
+                
+        if product_idx == -1:
+            raise HTTPException(status_code=404, detail="Product not found")
+            
+        if product.get('locked', False):
+            raise HTTPException(status_code=400, detail="Product is locked and cannot be deleted")
+            
+        # Remove from config
+        detector.config['products'].pop(product_idx)
+        
+        with open(detector.config_path, 'w') as f:
+            json.dump(detector.config, f, indent=2)
+            
+        # Delete directory
+        ref_dir = Path(f"data/references/{product_id}")
+        if ref_dir.exists():
+            try:
+                shutil.rmtree(ref_dir)
+                logger.info(f"Deleted product references directory: {ref_dir}")
+            except Exception as e:
+                logger.warning(f"Failed to delete references directory {ref_dir}: {e}")
+                
+        # Remove from FAISS index
+        uids_to_remove = []
+        for uid, meta in detector.index.metadata.items():
+            if meta['product_id'] == product_id:
+                uids_to_remove.append(uid)
+                
+        for uid in uids_to_remove:
+            detector.index.remove_product(uid)
+            
+        if uids_to_remove:
+            detector.index.save()
+            logger.info(f"Removed {len(uids_to_remove)} vectors for product {product_id}")
+            
+        return {"success": True, "message": f"Product deleted including {len(uids_to_remove)} vectors."}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting product: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/{product_id}/references")
 async def add_reference(
     product_id: str,
@@ -123,6 +228,9 @@ async def add_reference(
         
         if not product:
             raise HTTPException(status_code=404, detail="Product not found")
+        
+        if product.get('locked', False):
+            raise HTTPException(status_code=400, detail="Product is locked and cannot receive new references")
         
         # Save image
         contents = await file.read()
@@ -207,6 +315,9 @@ async def delete_reference(
         
         if not product:
             raise HTTPException(status_code=404, detail="Product not found")
+            
+        if product.get('locked', False):
+            raise HTTPException(status_code=400, detail="Product is locked and its references cannot be deleted")
         
         # 2. Find and remove reference from config
         ref_image = None

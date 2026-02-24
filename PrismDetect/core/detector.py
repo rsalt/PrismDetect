@@ -146,25 +146,15 @@ class ProductDetector:
         
         # Save index after loading
         self.index.save()
-    
+        
     def detect(self, image: np.ndarray, min_confidence: float = None) -> List[DetectionResult]:
         """
         Detect products in image with multi-stage validation
-        
-        Args:
-            image: BGR image as numpy array
-            min_confidence: Override default confidence threshold
-            
-        Returns:
-            List of DetectionResult objects
         """
         start_time = time.time()
         
-        # NOTE: Resizing is now handled in API route layer (api/routes/detect.py) using PIL
-        # to prevent OOM before we even get here.
+        # NOTE: Resizing is handled in API route layer (api/routes/detect.py) using PIL
             
-        all_detections = []
-        
         # Use config threshold if not overridden
         if min_confidence is None:
             min_confidence = self.config['system'].get('min_confidence', 0.75)
@@ -177,6 +167,9 @@ class ProductDetector:
         except Exception as e:
             logger.error(f"Patch scanning failed: {e}")
             return []
+            
+        # Store high-confidence candidates before running expensive OCR
+        pre_nms_candidates = []
         
         for i, (patch, bbox) in enumerate(patches):
             if i % 10 == 0:
@@ -190,13 +183,17 @@ class ProductDetector:
                 continue
             
             # Stage 3: Search index
-            candidates = self.index.search(embedding, k=3)
+            matches = self.index.search(embedding, k=3)
             
-            for candidate in candidates:
-                if candidate['similarity'] < min_confidence:
+            for candidate in matches:
+                raw_sim = candidate['similarity']
+                if raw_sim < min_confidence:
                     continue
                 
-                # Stage 4: Shape validation
+                # Apply base scaling curve immediately to determine real confidence
+                scaled_sim = min(1.0, raw_sim * 1.18)
+                
+                # Stage 4: Shape validation (Fast)
                 actual_ratio = self.shape_validator.get_aspect_ratio(patch)
                 expected_ratio = candidate['metadata'].get('shape_ratio', actual_ratio)
                 tolerance = candidate['metadata'].get('validation', {}).get('shape_tolerance', 0.15)
@@ -207,56 +204,127 @@ class ProductDetector:
                     tolerance
                 )
                 
-                # Stage 5: Text validation
+                if shape_valid:
+                    scaled_sim = min(1.0, scaled_sim + 0.02)
+                    
+                pre_nms_candidates.append({
+                    'product_id': candidate['product_id'],
+                    'product_name': candidate['metadata']['name'],
+                    'confidence': scaled_sim,
+                    'bbox': bbox,
+                    'shape_valid': shape_valid,
+                    'keywords': candidate['metadata'].get('keywords', []),
+                    'patch': patch
+                })
+        
+        # Group candidates by product_id to ensure we only return 1 bounding box maximum per product type
+        from collections import defaultdict
+        product_groups = defaultdict(list)
+        for cand in pre_nms_candidates:
+            product_groups[cand['product_id']].append(cand)
+            
+        final_detections = []
+        
+        for product_id, cands in product_groups.items():
+            # 1. Merge overlapping patches for this specific product to form full-object bounding boxes
+            clusters = []
+            
+            for cand in cands:
+                cand_bbox = cand['bbox'] # [x, y, w, h]
+                matched_cluster = None
+                
+                # Check if this patch overlaps with any existing cluster for this product
+                for cluster in clusters:
+                    cb = cluster['bbox']
+                    # Calculate Intersection over Union (IoU) or Intersection over Minimum (IoM)
+                    x1 = max(cand_bbox[0], cb[0])
+                    y1 = max(cand_bbox[1], cb[1])
+                    x2 = min(cand_bbox[0] + cand_bbox[2], cb[0] + cb[2])
+                    y2 = min(cand_bbox[1] + cand_bbox[3], cb[1] + cb[3])
+                    
+                    if x2 > x1 and y2 > y1:
+                        # They overlap physically
+                        matched_cluster = cluster
+                        break
+                        
+                if matched_cluster:
+                    # Expand cluster bounds
+                    cb = matched_cluster['bbox']
+                    new_x = min(cb[0], cand_bbox[0])
+                    new_y = min(cb[1], cand_bbox[1])
+                    new_max_x = max(cb[0] + cb[2], cand_bbox[0] + cand_bbox[2])
+                    new_max_y = max(cb[1] + cb[3], cand_bbox[1] + cand_bbox[3])
+                    matched_cluster['bbox'] = [new_x, new_y, new_max_x - new_x, new_max_y - new_y]
+                    # Update confidence if this patch is stronger
+                    matched_cluster['confidence'] = max(matched_cluster['confidence'], cand['confidence'])
+                else:
+                    # Create new cluster
+                    clusters.append({
+                        'product_id': cand['product_id'],
+                        'product_name': cand['product_name'],
+                        'confidence': cand['confidence'],
+                        'bbox': list(cand_bbox),
+                        'shape_valid': cand['shape_valid'],
+                        'keywords': cand['keywords']
+                    })
+                    
+            # 2. Sort the independent physical clusters for this product by confidence
+            clusters.sort(key=lambda x: x['confidence'], reverse=True)
+            
+            # 3. Only keep the SINGLE BEST instance of this product "don't need to detect again"
+            if clusters:
+                best_cluster = clusters[0]
+                
+                # Stage 5: Expensive Text Validation ONLY on the final best cluster
                 text_verified = False
                 matched_keywords = []
+                final_confidence = best_cluster['confidence']
                 
-                if shape_valid or candidate['similarity'] > 0.9:
-                    keywords = candidate['metadata'].get('keywords', [])
-                    if keywords:
-                        try:
-                            # Verify text only if high confidence or shape valid
-                            # Text validation is expensive and crash-prone
-                            text_verified, matched_keywords = self.text_validator.validate(
-                                patch, 
-                                keywords
-                            )
-                        except Exception as e:
-                            logger.warning(f"Text validation failed for patch {i}: {e}")
+                x, y, w, h = best_cluster['bbox']
                 
-                # Stage 6: Final decision
-                # Accept if it passed the min_confidence check (already done in Stage 3)
-                if True:
-                    
-                    # Adjust confidence based on validations
-                    final_confidence = candidate['similarity']
-                    if text_verified:
-                        final_confidence = min(1.0, final_confidence + 0.05)
-                    if shape_valid:
-                        final_confidence = min(1.0, final_confidence + 0.02)
-                    
-                    detection = DetectionResult(
-                        product_id=candidate['product_id'],
-                        product_name=candidate['metadata']['name'],
-                        confidence=final_confidence,
-                        bbox=bbox,
-                        text_verified=text_verified,
-                        shape_valid=shape_valid,
-                        matched_keywords=matched_keywords,
-                        processing_ms=(time.time() - start_time) * 1000
-                    )
-                    
-                    all_detections.append(detection)
-        
-        # Remove duplicates (keep highest confidence per product)
-        final_detections = {}
-        for det in all_detections:
-            key = f"{det.product_id}_{det.bbox}"
-            if key not in final_detections or det.confidence > final_detections[key].confidence:
-                final_detections[key] = det
+                # Safety check: constrain bounding box to image dimensions
+                x = max(0, x)
+                y = max(0, y)
+                w = min(w, image.shape[1] - x)
+                h = min(h, image.shape[0] - y)
+                best_cluster['bbox'] = (x, y, w, h)
+                
+                merged_patch = image[y:y+h, x:x+w]
+                
+                # Only run OCR if patch is valid size to prevent OpenCV segfault
+                if merged_patch.size > 0 and best_cluster['keywords'] and (best_cluster['shape_valid'] or final_confidence > 0.9):
+                    try:
+                        # Resize massive merged patches down to reasonable sizes before OCR to prevent OOM
+                        max_ocr_dim = 600
+                        if max(w, h) > max_ocr_dim:
+                            scale = max_ocr_dim / max(w, h)
+                            ocr_patch = cv2.resize(merged_patch, (int(w*scale), int(h*scale)))
+                        else:
+                            ocr_patch = merged_patch
+                            
+                        text_verified, matched_keywords = self.text_validator.validate(
+                            ocr_patch, 
+                            best_cluster['keywords']
+                        )
+                        if text_verified:
+                            final_confidence = min(1.0, final_confidence + 0.05)
+                    except Exception as e:
+                        logger.warning(f"Text validation failed for specific detection: {e}")
+                        
+                detection = DetectionResult(
+                    product_id=best_cluster['product_id'],
+                    product_name=best_cluster['product_name'],
+                    confidence=final_confidence,
+                    bbox=best_cluster['bbox'],
+                    text_verified=text_verified,
+                    shape_valid=best_cluster['shape_valid'],
+                    matched_keywords=matched_keywords,
+                    processing_ms=(time.time() - start_time) * 1000
+                )
+                final_detections.append(detection)
         
         # Auto-learn from high confidence detections
-        for det in final_detections.values():
+        for det in final_detections:
             if self.auto_learner.should_learn(det):
                 x, y, w, h = det.bbox
                 patch = image[y:y+h, x:x+w]
@@ -265,46 +333,10 @@ class ProductDetector:
                     detection=det,
                     detector=self
                 )
+            
+        logger.info(f"Found {len(final_detections)} detections in {time.time()-start_time:.2f}s")
         
-        # Apply Non-Maximum Suppression (NMS)
-        result_list = list(final_detections.values())
-        final_list = []
-        if result_list:
-            # Sort by confidence
-            result_list.sort(key=lambda x: x.confidence, reverse=True)
-            
-            keep = []
-            while result_list:
-                current = result_list.pop(0)
-                keep.append(current)
-                
-                # Compare with remaining
-                remaining = []
-                for other in result_list:
-                    # Calculate IoU
-                    x1 = max(current.bbox[0], other.bbox[0])
-                    y1 = max(current.bbox[1], other.bbox[1])
-                    x2 = min(current.bbox[0] + current.bbox[2], other.bbox[0] + other.bbox[2])
-                    y2 = min(current.bbox[1] + current.bbox[3], other.bbox[1] + other.bbox[3])
-                    
-                    intersection = max(0, x2 - x1) * max(0, y2 - y1)
-                    area1 = current.bbox[2] * current.bbox[3]
-                    area2 = other.bbox[2] * other.bbox[3]
-                    union = area1 + area2 - intersection
-                    
-                    iou = intersection / union if union > 0 else 0
-                    
-                    # If overlap is too high, suppress (unless different product)
-                    if iou < 0.3 or current.product_id != other.product_id:
-                        remaining.append(other)
-                
-                result_list = remaining
-            
-            final_list = keep
-            
-        logger.info(f"Found {len(final_list)} detections in {time.time()-start_time:.2f}s")
-        
-        return final_list
+        return final_detections
     
     def add_product(self, product_config: dict) -> bool:
         """Add a new product to the system"""

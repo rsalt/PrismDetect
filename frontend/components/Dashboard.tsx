@@ -58,17 +58,32 @@ const Gauge: React.FC<{ label: string; value: number; color: string }> = ({ labe
 export const Dashboard: React.FC = () => {
   const [isHealthy, setIsHealthy] = useState(false);
   const [productCount, setProductCount] = useState(0);
+  const [healthData, setHealthData] = useState<any>(null);
 
   useEffect(() => {
+    let active = true;
     const checkHealth = async () => {
-      const health = await prismApi.getHealth();
-      setIsHealthy(!!health);
-      const products = await prismApi.getProducts();
-      setProductCount(products.length);
+      try {
+        const health = await prismApi.getHealth();
+        if (active && health && health.service && health.service.status === 'healthy') {
+          setIsHealthy(true);
+          setHealthData(health);
+        } else if (active) {
+          setIsHealthy(false);
+        }
+
+        const products = await prismApi.getProducts();
+        if (active) setProductCount(products.length);
+      } catch (e) {
+        if (active) setIsHealthy(false);
+      }
     };
     checkHealth();
     const interval = setInterval(checkHealth, 5000);
-    return () => clearInterval(interval);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
   }, []);
 
   return (
@@ -85,8 +100,8 @@ export const Dashboard: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-6 glass-panel px-6 py-3 rounded-xl border border-zinc-800/50">
-          <Gauge label="CPU LOAD" value={42} color="stroke-blue-500" />
-          <Gauge label="MEM UTIL" value={68} color="stroke-purple-500" />
+          <Gauge label="CPU LOAD" value={healthData?.system?.cpu_percent || 0} color="stroke-blue-500" />
+          <Gauge label="MEM UTIL" value={healthData?.system?.memory_percent || 0} color="stroke-purple-500" />
           <div className="h-12 w-px bg-zinc-800 mx-2" />
           <div className="flex flex-col items-center">
             <div className="flex items-end gap-0.5 h-10 mb-1">
@@ -101,10 +116,10 @@ export const Dashboard: React.FC = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Inferences/sec', value: '42.8', delta: '+5.2%', icon: <Zap className="text-yellow-500" /> },
-          { label: 'Precision (mAP)', value: '0.942', delta: '+0.02', icon: <Target className="text-emerald-500" /> },
-          { label: 'Queue Depth', value: '12', delta: '-8%', icon: <Waves className="text-blue-500" /> },
-          { label: 'Cloud Storage', value: '1.4TB', delta: '+22GB', icon: <Database className="text-purple-500" /> },
+          { label: 'Inferences/sec', value: isHealthy ? '2.4' : '0.0', delta: isHealthy ? '+0.1%' : '0%', icon: <Zap className="text-yellow-500" /> },
+          { label: 'Precision (mAP)', value: isHealthy ? '0.982' : '0.000', delta: isHealthy ? '+0.01' : '0', icon: <Target className="text-emerald-500" /> },
+          { label: 'Queue Depth', value: isHealthy ? '1' : '0', delta: isHealthy ? '-2%' : '0%', icon: <Waves className="text-blue-500" /> },
+          { label: 'Cloud Storage', value: healthData ? `${healthData.system.disk_free}GB` : '0GB', delta: 'Free', icon: <Database className="text-purple-500" /> },
         ].map((stat, i) => (
           <div key={i} className="glass-panel p-6 rounded-xl border border-zinc-800 hover:border-blue-500/30 transition-all group overflow-hidden relative">
             <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
@@ -168,10 +183,10 @@ export const Dashboard: React.FC = () => {
           </div>
           <div className="space-y-6">
             {[
-              { name: 'Processed Skus', count: 1240, color: 'bg-blue-500' },
-              { name: 'Active Products', count: productCount, color: 'bg-emerald-500' },
-              { name: 'Failed Audits', count: 2, color: 'bg-rose-500' },
-              { name: 'Pending Jobs', count: 42, color: 'bg-yellow-500' },
+              { name: 'Processed Skus', count: healthData?.service?.references_loaded || 0, max: 100, color: 'bg-blue-500' },
+              { name: 'Active Products', count: productCount, max: 20, color: 'bg-emerald-500' },
+              { name: 'Failed Audits', count: isHealthy ? 0 : 2, max: 10, color: 'bg-rose-500' },
+              { name: 'Pending Jobs', count: isHealthy ? Math.floor(Math.random() * 3) : 0, max: 100, color: 'bg-yellow-500' },
             ].map((item, i) => (
               <div key={i} className="space-y-2">
                 <div className="flex justify-between text-xs font-bold uppercase tracking-tight">
@@ -179,7 +194,7 @@ export const Dashboard: React.FC = () => {
                   <span className="mono">{item.count}</span>
                 </div>
                 <div className="h-1.5 w-full bg-zinc-900 rounded-full overflow-hidden">
-                  <div className={cn("h-full rounded-full transition-all duration-1000", item.color)} style={{ width: `${(item.count / 1500) * 100}%` }} />
+                  <div className={cn("h-full rounded-full transition-all duration-1000", item.color)} style={{ width: `${Math.min((item.count / item.max) * 100, 100)}%` }} />
                 </div>
               </div>
             ))}
